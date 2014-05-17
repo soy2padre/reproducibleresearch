@@ -1,0 +1,84 @@
+##Reproducible Research
+#Peer Assessment 1
+#2014-05-19
+
+#*Loading and preprocessing the data*
+- Load the data
+- Process/transform the data
+```{r}
+## Dependencies
+
+## Set file locations
+setwd('~/Documents/repoducibleresearch/')
+
+## Read data
+stepdat <-read.csv(unz('repdata-data-activity.zip','activity.csv'))
+```
+
+#*What is mean total number of steps taken per day?*
+- Histogram of total number of steps taken each day
+- Mean and median total number of steps taken each day
+```{r}
+## Aggregate by day and display histogram
+stepsperday <- aggregate(stepdat$steps,by=list(as.numeric(as.Date(stepdat$date))),FUN=sum,na.rm=TRUE)
+hist(stepsperday[,2],main='Histogram of Total Number of Steps Per Day', ylab='Frequency',xlab='Steps per Day')
+
+## Mean and median
+stepsum <- summary(stepsperday[,2])
+```
+The mean and median number of steps per day are `r stepsum[3]` and `r stepsum[4]` respectively.
+
+#* What is the average daily activity pattern?*
+- Time series plot
+- Which 5 minute interval contains maximum # of steps?
+
+```{r, warning=FALSE}
+aggdat <- aggregate(stepdat, by=list(stepdat$interval),FUN=mean,na.rm=TRUE)
+plot(x=aggdat$interval,y=aggdat$steps,type='l')
+maxint <- aggdat[which(aggdat$steps==max(aggdat$steps)),]$interval
+```
+
+The interval containing, on average, the maximum numer of steps is `r maxint`.
+
+#*Imputing missing values*
+- Calculate and report total number of rows with missing values
+- Devise imputation strategy
+- Create new data set with missing values imputed
+- Histogram of total steps per day, calculate mean and median steps per day
+
+```{r}
+missrows <- sum(is.na(stepdat))
+```
+
+A total of `r missrows` rows contain missing values.
+
+*Imputation strategy*
+
+Replace missing values with observed mean for that interval. A more sophisticated approach can be found in package mtsdi.
+
+Code below replaces missing values.
+
+```{r,warning=FALSE}
+stepdat2 <- stepdat
+toreplace <- is.na(stepdat2)
+for (i in 1:dim(toreplace)[1]) {
+ if (toreplace==TRUE) {
+     stepdat2$steps[which(toreplace)] <- aggdat$steps[which(aggdat$interval==stepdat2$interval[which(toreplace)])]
+ }
+}
+
+## Aggregate imputed data by day
+stepsperday2 <- aggregate(stepdat2$steps,by=list(as.numeric(as.Date(stepdat2$date))),FUN=sum,na.rm=TRUE)
+hist(stepsperday2[,2],main='Histogram of Imputed Number of Steps Per Day', ylab='Frequency',xlab='Steps per Day')
+
+## Mean and median
+stepsum2 <- summary(stepsperday2[,2])
+```
+
+The mean and median number of steps per day are `r stepsum2[3]` and `r stepsum2[4]` respectively.
+
+#*Weekday/Weekend Differences*
+```{r}
+stepdat2$weekday <- as.factor(weekdays(as.Date(stepdat2$date))=='Saturday' | weekdays(as.Date(stepdat2$date))=='Sunday')
+
+```
