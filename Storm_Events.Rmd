@@ -1,0 +1,120 @@
+U.S. Storm Events: Population Health and Economic Consequences
+==============================================================
+
+**Synopsis**
+------------
+
+*"Everybody complains about the weather, but nobody does anything about it."*
+- Charles Dudley Warner
+
+Data analysis was directed toward addressing the following questions:
+- Across the United States, which types of events are most harmful with respect to population health?
+- Across the United States, which types of events have the greatest economic consequences?
+
+Harm to population health was defined in terms of number of weather event-related **fatalities** and **injuries**.
+
+Economic consequences were defined in terms of damage to **property** and **crops**.
+
+**Data Processing**
+-------------------
+
+Several steps were involved in data processing.
+- Reading data
+- Coding outcomes
+
+With regard to reading the data, there appear to be one or more problems around special characters embedded in the data. It is most likely some kind of encoding issue (\^M for carriage return in a quote, for example). The original data file has 1232705 lines, but only 902297 lines are being read in. Various attempted solutions (e.g., dropping problematic columns) did not resolve the issue so for the purposes of this report, it is simply noted as a limitation.
+
+```{r, warning=FALSE}
+## Dependencies
+if(!require("ggplot2")) install.packages("gplot2", dependencies=TRUE)
+if(!require("gridExtra")) install.packages("gridExtra", dependencies=TRUE)
+
+## Reading Data
+setwd('~/Documents/reproducibleresearch/')
+
+tokeep <- c(rep("NULL",6),rep("character",2),rep("NULL",14),rep("character",6),rep("NULL",9))
+stormdat <- read.csv(bzfile('repdata-data-StormData.csv.bz2', encoding=getOption("encoding")),header=TRUE, colClasses=tokeep)
+
+## Coding outcomes
+## FATALITIES and INJURIES need to be recast as numeric
+stormdat$FATALITIES <- as.numeric(stormdat$FATALITIES)
+stormdat$INJURIES   <- as.numeric(stormdat$INJURIES)
+
+## Event type (EVTYPE) needs to be recast as factor
+stormdat$EVTYPE     <- as.factor(stormdat$EVTYPE)
+## Damage variables are reported in raw (XEXP==""), 
+## thousands (XEXP=="K"), millions (XEXP=="M"), or
+## bmillions (XEXP=="B") of dollars so need to be 
+## placed on comparable metric.
+## Raw dollars are are used here.
+
+## Property damage
+stormdat$propmult <- stormdat$PROPDMGEXP
+stormdat$propmult[stormdat$propmult==""] <- "1"
+stormdat$propmult[stormdat$propmult=="K"] <- "1000"
+stormdat$propmult[stormdat$propmult=="M"] <- "1000000"
+stormdat$propmult[stormdat$propmult=="B"] <- "1000000000"
+stormdat$propmult <- as.numeric(stormdat$propmult)
+stormdat$propdmg <- as.numeric(stormdat$PROPDMG)*as.numeric(stormdat$propmult)
+
+## Crop damage
+stormdat$cropmult <- stormdat$CROPDMGEXP
+stormdat$cropmult[stormdat$cropmult==""] <- "1"
+stormdat$cropmult[stormdat$cropmult=="K"] <- "1000"
+stormdat$cropmult[stormdat$cropmult=="M"] <- "1000000"
+stormdat$cropmult[stormdat$cropmult=="B"] <- "1000000000"
+stormdat$cropmult <- as.numeric(stormdat$cropmult)
+stormdat$cropdmg <- as.numeric(stormdat$CROPDMG)*as.numeric(stormdat$cropmult)
+```
+
+**Results**
+-----------
+
+There were a number of inconsistencies between how events were recorded in the documentation and how they appeared in the data file, and some were recorded as dates (e.g., "Summary Jan 17").
+
+```{r}
+nevents <- 3
+events <- sort(table(stormdat$EVTYPE), decreasing=TRUE)[1:nevents]
+eventnames <- names(events)
+```
+
+However, because the purpose of this report was to catalog events with the greatest impact, analysis is limited to the `r nevents` most commonly recorded weather events (`r eventnames`) as shown below.
+
+```{r,results='markup'}
+stormdat2 <- subset(stormdat, as.factor(stormdat$EVTYPE) %in% names(events))
+sort(table(stormdat2$EVTYPE),decreasing=TRUE)
+```
+
+Total public health and economic impact was assessed in aggregate for each type of weather event.
+
+```{r,fig.height=4,fig.width=7}
+## Aggregate relevant outcome columns by weather event
+aggdat <- aggregate(x=stormdat2[,c(3:4,10,12)],by=list(stormdat2$EVTYPE),FUN=sum, na.rm=TRUE)
+fatal <- tolower(aggdat$Group.1[which(aggdat$FATALITIES==max(aggdat$FATALITIES))])
+injure <- tolower(aggdat$Group.1[which(aggdat$INJURIES==max(aggdat$INJURIES))])
+property <- tolower(aggdat$Group.1[which(aggdat$propdmg==max(aggdat$propdmg))])
+crop <- tolower(aggdat$Group.1[which(aggdat$cropdmg==max(aggdat$cropdmg))])
+## Use this if still a tie at 0
+##crop <- tolower(aggdat$Group.1[which(aggdat$cropdmg==max(aggdat$cropdmg))])[1]
+
+numfat <- aggdat$FATALITIES[which(aggdat$FATALITIES==max(aggdat$FATALITIES))]
+numinj <- aggdat$INJURIES[which(aggdat$INJURIES==max(aggdat$INJURIES))]
+propdmg <- aggdat$propdmg[which(aggdat$propdmg==max(aggdat$propdmg))]
+cropdmg <- aggdat$cropdmg[which(aggdat$cropdmg==max(aggdat$cropdmg))]
+
+plot1a <- ggplot(aggdat, aes(y=FATALITIES, x=Group.1)) + geom_bar(stat='identity', fill=c(1:nevents)) + xlab("Event") + ylab("Number of Fatalities") + ggtitle("Number of Fatalities by \nType of Weather Event") + theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+plot1b <- ggplot(aggdat, aes(y=INJURIES, x=Group.1)) + geom_bar(stat='identity', fill=c(1:nevents)) + xlab("Event") + ylab("Number of Injuries") + ggtitle("Number of Injuries by \nType of Weather Event") + theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+grid.arrange(plot1a, plot1b, ncol=2)
+```
+
+As can be seen in the figure above, the greatest number of fatalities was `r numfat` for `r fatal`.  The greatest number of injuries was `r numinj` for `r injure`.
+
+As can be seen in the figure below, the greatest financial consequences were for `r property` which caused a total of $`r propdmg` in property damage. Similarly, the greatest crop damages were for `r crop` which caused a total of $`r cropdmg` in crop damage.
+
+```{r,fig.height=4,fig.width=7}
+## Aggregate relevant outcome columns by weather event
+plot2a <- ggplot(aggdat, aes(y=propdmg, x=Group.1)) + geom_bar(stat='identity', fill=c(1:nevents)) + xlab("Event") + ylab("Property Damaage ($)") + ggtitle("Total Property Damage by \nType of Weather Event") + theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+plot2b <- ggplot(aggdat, aes(y=cropdmg, x=Group.1)) + geom_bar(stat='identity', fill=c(1:nevents)) + xlab("Event") + ylab("Crop Damaage ($)") + ggtitle("Total Crop Damage by \nType of Weather Event") + theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+
+grid.arrange(plot2a, plot2b, ncol=2)
+```
